@@ -25,7 +25,7 @@ print("✅ Widget creado. Escribe arriba el nombre completo de tu catálogo y vu
 # `re` es la librería estándar de Python para expresiones regulares; aquí valida el formato del catálogo.
 import re
 # Los widgets permiten cambiar catálogo y endpoint desde la interfaz, sin editar el código.
-dbutils.widgets.text("modelo", "databricks-gpt-5-6-luna", "Endpoint de Foundation Model")
+dbutils.widgets.text("modelo", "system.ai.gpt-5-6-luna", "Endpoint de Foundation Model")
 
 CATALOGO = dbutils.widgets.get("catalogo").strip().lower()
 MODELO = dbutils.widgets.get("modelo").strip()
@@ -34,6 +34,33 @@ assert CATALOGO in {r.catalog.lower() for r in spark.sql("SHOW CATALOGS").collec
 assert MODELO, "Indica un endpoint disponible en tu workspace."
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOGO}.ai_lab")
 print(f"✅ catálogo={CATALOGO} · modelo={MODELO}")
+
+# COMMAND ----------
+
+# MAGIC %md ### Troubleshooting: ¿tu workspace tiene este modelo?
+# MAGIC Cada workspace de Databricks tiene disponibles distintos modelos según cuándo se creó y su
+# MAGIC región — no es lo mismo para todos. Si el `ai_query` de más abajo falla con
+# MAGIC `RESOURCE_DOES_NOT_EXIST`, corré esta celda antes de pedir ayuda: te dice exactamente qué
+# MAGIC endpoints legacy (`databricks-...`) tiene TU workspace. Los modelos `system.ai.*` (como el
+# MAGIC default de este notebook) no aparecen en esta lista aunque sí funcionen — es un catálogo
+# MAGIC distinto (Unity AI Gateway), no un bug de la celda.
+
+# COMMAND ----------
+
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()
+endpoints_activos = [ep.name for ep in w.serving_endpoints.list()]
+
+if MODELO.startswith("system.ai."):
+    print(f"ℹ️  '{MODELO}' es un modelo de Unity AI Gateway: no aparece en esta lista aunque esté disponible.")
+    print("   Si igual falla, revisá en el menú AI/ML → AI Gateway → Models que aparezca listado ahí.")
+elif MODELO in endpoints_activos:
+    print(f"✅ El endpoint '{MODELO}' existe en este workspace.")
+else:
+    print(f"❌ El endpoint '{MODELO}' NO existe en este workspace.")
+    print("Endpoints disponibles:", endpoints_activos)
+    print("Sugerencia: cambiá el widget 'modelo' a 'system.ai.gpt-5-6-luna'.")
 
 # COMMAND ----------
 
@@ -72,7 +99,7 @@ assert respuestas_base.count() == 2
 # MAGIC %md ### Parámetros reales del endpoint
 # MAGIC `ai_query` permite pasar parámetros mediante `modelParameters`, pero el endpoint puede
 # MAGIC rechazar algunos. En este workspace verificamos que `max_tokens` funciona; `temperature` y
-# MAGIC `top_p` no están soportados por `databricks-gpt-5-6-luna`, así que no los simulamos en clase.
+# MAGIC `top_p` no están soportados por `system.ai.gpt-5-6-luna`, así que no los simulamos en clase.
 
 # COMMAND ----------
 
