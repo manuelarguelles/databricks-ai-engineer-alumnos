@@ -15,19 +15,28 @@ if ! command -v databricks >/dev/null 2>&1; then
   exit 3
 fi
 
-profiles_output="$(databricks auth profiles 2>&1)" || {
+profiles_json="$(databricks auth profiles -o json 2>&1)" || {
   echo "ERROR: no se pudieron consultar los perfiles del Databricks CLI." >&2
   exit 4
 }
 
-profile_line="$(printf '%s\n' "$profiles_output" | awk -v wanted="$profile" '$1 == wanted { print; exit }')"
-if [[ -z "$profile_line" ]]; then
+profile_info="$(printf '%s' "$profiles_json" | PROFILE_NAME="$profile" python3 -c '
+import json, os, sys
+payload = json.load(sys.stdin)
+profiles = payload.get("profiles", payload) if isinstance(payload, dict) else payload
+wanted = os.environ["PROFILE_NAME"]
+match = next((p for p in profiles if p.get("name") == wanted), None)
+if match is None:
+    sys.exit(1)
+print(match.get("host", ""))
+print("YES" if match.get("valid") else "NO")
+')" || {
   echo "ERROR: el perfil '$profile' no existe. Usa databricks auth login." >&2
   exit 5
-fi
+}
 
-host="$(printf '%s\n' "$profile_line" | awk '{ print $2 }')"
-valid="$(printf '%s\n' "$profile_line" | awk '{ print $NF }')"
+host="$(printf '%s\n' "$profile_info" | sed -n '1p')"
+valid="$(printf '%s\n' "$profile_info" | sed -n '2p')"
 if [[ "$valid" != "YES" ]]; then
   echo "ERROR: el perfil '$profile' no es válido. Renueva el login OAuth." >&2
   echo "Perfil: $profile"
